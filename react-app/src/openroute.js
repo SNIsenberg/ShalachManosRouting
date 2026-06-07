@@ -103,7 +103,15 @@ export default class OpenRouter {
       body: JSON.stringify(jobs),
     });
     const response = await fetch(request);
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Routing request failed: ${response.status} ${response.statusText} - ${errorText}`)
+    }
     const routing = await response.json();
+    if (!routing.routes || !routing.routes.length) {
+      return addresses
+    }
+
     for (let idx in routing.routes) {
       let route = routing.routes[idx];
       route.steps.forEach((step, index) => {
@@ -114,5 +122,7 @@ export default class OpenRouter {
         }
       });
     }
+
+    return addresses
   }
 }

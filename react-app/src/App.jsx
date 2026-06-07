@@ -183,7 +183,30 @@ function VehicleItem({ index, vehicle, onChange, onDelete, showCoordinates }) {
             )}
           </td>
         </>
-      ) : null}
+      ) : (
+        <td>
+          {isEditing ? (
+            <>
+              <input
+                style={{ width: 'calc(50% - 8px)', marginRight: '8px' }}
+                value={(draft.start || []).join(',')}
+                onChange={e => updateCoordinate('start', e.target.value)}
+                placeholder="start"
+              />
+              <input
+                style={{ width: 'calc(50% - 8px)' }}
+                value={(draft.end || []).join(',')}
+                onChange={e => updateCoordinate('end', e.target.value)}
+                placeholder="end"
+              />
+            </>
+          ) : vehicle.start && vehicle.end ? (
+            `${(vehicle.start || []).map(c => parseFloat(c).toFixed(3)).join(', ')}  /  ${(vehicle.end || []).map(c => parseFloat(c).toFixed(3)).join(', ')}`
+          ) : (
+            ''
+          )}
+        </td>
+      )}
       <td>
         {isEditing ? (
           <>
@@ -277,11 +300,29 @@ function App() {
       return
     }
 
+    const buildAutocompleteUrl = () => {
+      const query = encodeURIComponent(lookupAddress.address)
+      let url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=${query}`
+      if (boundary) {
+        const trimmed = boundary.trim()
+        if (/^[a-zA-Z]{2}$/.test(trimmed)) {
+          url += `&countrycodes=${encodeURIComponent(trimmed)}`
+        } else if (/^[^=]+=[^=]+$/.test(trimmed)) {
+          url += `&${encodeURIComponent(trimmed)}`
+        } else {
+          const parts = trimmed.split(',').map(s => s.trim())
+          if (parts.length === 4 && parts.every(p => !Number.isNaN(Number(p)))) {
+            url += `&viewbox=${parts.join(',')}&bounded=1`
+          }
+        }
+      }
+      return url
+    }
+
     const controller = new AbortController()
     const timer = setTimeout(async () => {
       try {
-        const query = encodeURIComponent(lookupAddress.address)
-        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=${query}`
+        const url = buildAutocompleteUrl()
         const response = await fetch(url, {
           signal: controller.signal,
           headers: {
@@ -309,7 +350,7 @@ function App() {
       clearTimeout(timer)
       controller.abort()
     }
-  }, [lookupAddress.address])
+  }, [lookupAddress.address, boundary])
 
   const lookupAddressButton = async () => {
     const router = new OpenRouter(apiKey, boundary)
@@ -318,10 +359,33 @@ function App() {
     setLookupAddress({ ...lookupAddress })
   }
 
+  const buildStreetLabel = suggestion => {
+    if (!suggestion.address) {
+      return suggestion.display_name
+    }
+
+    const street =
+      suggestion.address.road ||
+      suggestion.address.pedestrian ||
+      suggestion.address.cycleway ||
+      suggestion.address.footway ||
+      suggestion.address.path ||
+      suggestion.address.residential ||
+      suggestion.address.neighbourhood ||
+      suggestion.address.suburb
+
+    const houseNumber = suggestion.address.house_number
+    if (street) {
+      return houseNumber ? `${houseNumber} ${street}` : street
+    }
+
+    return suggestion.display_name
+  }
+
   const selectSuggestion = suggestion => {
     setLookupAddress(prev => ({
       ...prev,
-      address: suggestion.display_name,
+      address: buildStreetLabel(suggestion),
       zip: suggestion.postcode || prev.zip,
       longitude: parseFloat(suggestion.lon),
       latitude: parseFloat(suggestion.lat),
@@ -354,10 +418,19 @@ function App() {
 
   const route = async () => {
     const router = new OpenRouter(apiKey, boundary)
-    // make deep copy so we don't mutate state directly
-    const addrCopy = addresses.map(a => ({ ...a }))
-    await router.route(addrCopy, vehicles.map(v => ({ ...v })))
-    setAddresses(addrCopy)
+    // clear existing route fields before recomputing, but only update state after success
+    const addrCopy = addresses.map(a => ({
+      ...a,
+      route_index: '',
+      arrival: '',
+    }))
+
+    try {
+      const updated = await router.route(addrCopy, vehicles.map(v => ({ ...v })))
+      setAddresses(updated)
+    } catch (error) {
+      console.error('Routing failed', error)
+    }
   }
 
   const exportData = () => {
@@ -428,7 +501,12 @@ function App() {
   const sortByRoute = () => {
     setAddresses(prev => {
       const sorted = [...prev].sort((a, b) => {
-        if (!a.route_index || !b.route_index) return 0
+        const aEmpty = !a.route_index
+        const bEmpty = !b.route_index
+        if (aEmpty && bEmpty) return 0
+        if (aEmpty) return 1
+        if (bEmpty) return -1
+
         const [aVehicle, aIndex] = a.route_index.split('-').map(Number)
         const [bVehicle, bIndex] = b.route_index.split('-').map(Number)
         if (aVehicle !== bVehicle) return aVehicle - bVehicle
