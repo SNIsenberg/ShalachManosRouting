@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Map pin -->
+  <path d="M32 6
+           C21 6 13 14 13 25
+           C13 40 32 58 32 58
+           C32 58 51 40 51 25
+           C51 14 43 6 32 6Z"
+        fill="#2563EB"/>
+
+  <!-- Gift box -->
+  <rect x="21" y="19" width="22" height="18" rx="2" fill="white"/>
+  <rect x="30" y="19" width="4" height="18" fill="#2563EB"/>
+  <rect x="21" y="25" width="22" height="4" fill="#2563EB"/>
+
+  <!-- Bow -->
+  <path d="M30 19 C24 13,24 9,30 12 C33 14,33 17,30 19Z" fill="#DC2626"/>
+  <path d="M34 19 C40 13,40 9,34 12 C31 14,31 17,34 19Z" fill="#DC2626"/>
+</svg>
